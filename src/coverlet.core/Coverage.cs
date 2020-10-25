@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using Coverlet.Core.Abstractions;
+using Coverlet.Core.Attributes;
 using Coverlet.Core.Helpers;
 using Coverlet.Core.Instrumentation;
-
+using Coverlet.Core.Instrumentation.Reachability;
+using Mono.Cecil;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -121,20 +124,56 @@ namespace Coverlet.Core
                     continue;
                 }
 
-                var instrumenter = new Instrumenter(module,
-                                                    _identifier,
-                                                    _excludeFilters,
-                                                    _includeFilters,
-                                                    _excludedSourceFiles,
-                                                    _excludeAttributes,
-                                                    _doesNotReturnAttributes,
-                                                    _singleHit,
-                                                    _skipAutoProps,
-                                                    _logger,
-                                                    _instrumentationHelper,
-                                                    _fileSystem,
-                                                    _sourceRootTranslator,
-                                                    _cecilSymbolHelper);
+                var excludedFilesHelper = new ExcludedFilesHelper(_excludedSourceFiles, _logger);
+                var instrumenter = new Instrumenter(
+                    new InstrumenterOptions(module, _identifier)
+                    {
+                        IsFileIncluded = excludedFilesHelper.Exclude,
+                        IsAttributeExcluded = attribute => 
+                            AppendAttributeSuffixToAttributeNames(_excludeAttributes)
+                                .Union(new[]
+                                {
+                                    nameof(ExcludeFromCoverageAttribute),
+                                    nameof(ExcludeFromCodeCoverageAttribute)
+                                })
+                                .Contains(attribute.AttributeType.Name),
+                        IsNeverReturningCodeAttribute = attribute => 
+                            AppendAttributeSuffixToAttributeNames(_excludeAttributes)
+                                .Union(new[]
+                                {
+                                    nameof(DoesNotReturnAttribute)
+                                })
+                                .Contains(attribute.AttributeType.Name),
+                        SkipAutomaticProperties = _skipAutoProps,
+                        IsTypeExcluded = type => _instrumentationHelper.IsTypeExcluded(
+                            module, 
+                            type.FullName, 
+                            _excludeFilters),
+                        IsTypeIncluded = type => _instrumentationHelper.IsTypeIncluded(
+                            module, 
+                            type.FullName, 
+                            _includeFilters)
+                    },
+                    _logger,
+                    _instrumentationHelper,
+                    _fileSystem,
+                    _sourceRootTranslator,
+                    _cecilSymbolHelper);
+
+                //var instrumenter = new Instrumenter(module,
+                //    _identifier,
+                //    _excludeFilters,
+                //    _includeFilters,
+                //    _excludedSourceFiles,
+                //    _excludeAttributes,
+                //    _doesNotReturnAttributes,
+                //    _singleHit,
+                //    _skipAutoProps,
+                //    _logger,
+                //    _instrumentationHelper,
+                //    _fileSystem,
+                //    _sourceRootTranslator,
+                //    _cecilSymbolHelper);
 
                 if (instrumenter.CanInstrument())
                 {
@@ -166,6 +205,14 @@ namespace Coverlet.Core
                 UseSourceLink = _useSourceLink,
                 Results = _results.ToArray()
             };
+        }
+
+        private IEnumerable<string> AppendAttributeSuffixToAttributeNames(string[] attributeNames)
+        {
+            return (attributeNames ?? Array.Empty<string>())
+                // In case the attribute class ends in "Attribute", but it wasn't specified.
+                // Both names are included (if it wasn't specified) because the attribute class might not actually end in the prefix.
+                .SelectMany(a => a.EndsWith("Attribute") ? new[] {a} : new[] {a, $"{a}Attribute"});
         }
 
         public CoverageResult GetCoverageResult()

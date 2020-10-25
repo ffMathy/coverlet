@@ -245,13 +245,8 @@ namespace Coverlet.Core.Instrumentation.Reachability
         /// Predetermines methods that will not return, as 
         /// indicated by the presense of the given attributes.
         /// </summary>
-        public static ReachabilityHelper CreateForModule(ModuleDefinition module, string[] doesNotReturnAttributes, ILogger logger)
+        public static ReachabilityHelper CreateForModule(ModuleDefinition module, Predicate<CustomAttribute> isNeverReturningCodeAttribute, ILogger logger)
         {
-            if (doesNotReturnAttributes.Length == 0)
-            {
-                return new ReachabilityHelper(ImmutableHashSet<MetadataToken>.Empty);
-            }
-
             var processedMethods = ImmutableHashSet<MetadataToken>.Empty;
             var doNotReturn = ImmutableHashSet.CreateBuilder<MetadataToken>();
             foreach (var type in module.Types)
@@ -317,7 +312,7 @@ namespace Coverlet.Core.Instrumentation.Reachability
                         var hasDoesNotReturnAttribute = false;
                         foreach (var attr in mtdDef.CustomAttributes)
                         {
-                            if (Array.IndexOf(doesNotReturnAttributes, attr.AttributeType.Name) != -1)
+                            if (isNeverReturningCodeAttribute(attr))
                             {
                                 hasDoesNotReturnAttribute = true;
                                 break;

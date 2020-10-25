@@ -36,8 +36,8 @@ namespace Coverlet.Core.Instrumentation
         // to UnloadModule will be injected in System.AppContext.OnProcessExit.
         public static void RegisterUnloadEvents()
         {
-            AppDomain.CurrentDomain.ProcessExit += new EventHandler(UnloadModule);
-            AppDomain.CurrentDomain.DomainUnload += new EventHandler(UnloadModule);
+            AppDomain.CurrentDomain.ProcessExit += UnloadModule;
+            AppDomain.CurrentDomain.DomainUnload += UnloadModule;
         }
 
         public static void RecordHitInCoreLibrary(int hitLocationIndex)
